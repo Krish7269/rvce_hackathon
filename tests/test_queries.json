@@ -1,0 +1,40 @@
+[
+  {
+    "query": "Show monthly revenue trend and top products.",
+    "metadata": {
+      "columns": ["order_date", "product", "revenue"],
+      "types": {"order_date": "datetime", "product": "string", "revenue": "float"},
+      "stats": {"revenue": {"mean": 125.4, "max": 802.0}},
+      "row_count": 5821
+    },
+    "summary": "Transactional ecommerce dataset with monthly revenue and product info.",
+    "expected_snippets": [
+      "import pandas as pd",
+      "plt.savefig('chart.png'",
+      "__RESULT__"
+    ]
+  },
+  {
+    "query": "Compare average session duration by device type and find correlations.",
+    "metadata": {
+      "columns": ["session_id", "device", "duration", "pages", "bounce"],
+      "types": {
+        "session_id": "string",
+        "device": "category",
+        "duration": "float",
+        "pages": "int",
+        "bounce": "bool"
+      },
+      "stats": {"duration": {"mean": 6.2, "max": 30.1}},
+      "row_count": 20411
+    },
+    "summary": "Web analytics sessions with engagement metrics.",
+    "expected_snippets": [
+      "sns.set_theme",
+      "analysis_output.csv",
+      "__RESULT__"
+    ]
+  }
+]
+
+
