@@ -1,0 +1,1 @@
+print(df.head())  # Dummy code until ADK is integrated
