@@ -1,0 +1,27 @@
+# Ignore environment variables
+.env
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Ignore virtual environment
+venv/
+.env/
+*.env
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore plots and temp output
+output_plot.png
+
+# Ignore reports generated automatically
+reports/*.pdf
+reports/*.txt
+# Created by venv; see https://docs.python.org/3/library/venv.html
+*
