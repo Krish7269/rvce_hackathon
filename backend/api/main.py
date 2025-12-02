@@ -12,6 +12,50 @@ from fastapi.responses import JSONResponse
 import pandas as pd
 import importlib
 
+# Extra imports to reuse the notebook-style pipeline
+import numpy as np  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
+import seaborn as sns  # type: ignore
+
+try:  # pragma: no cover - optional in some environments
+    import google.generativeai as genai  # type: ignore
+except ImportError:  # pragma: no cover
+    genai = None
+
+from agent.utils import capture_output  # type: ignore
+from agent.code_generator import CodeGenerator  # type: ignore
+from agent.explanation_agent import ExplanationAgent  # type: ignore
+
+
+def _load_local_env(path: str = ".emv") -> None:
+    """
+    Lightweight .env loader so you can keep API keys in the `.emv` file.
+
+    Format (one per line, '#' comments allowed):
+        GEMINI_API_KEY=...
+        GOOGLE_API_KEY=...
+    """
+    try:
+        if not os.path.exists(path):
+            return
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if key and value and key not in os.environ:
+                    os.environ[key] = value
+    except Exception:
+        # Fail silently – missing keys will be reported later in a clear error.
+        return
+
+
+# Load `.emv` once when the backend starts so os.getenv() can see the keys.
+_load_local_env()
+
 app = FastAPI(title="AI-Analyzer API Wrapper")
 
 # ------------------------------------------------------
@@ -94,7 +138,8 @@ async def analyze(
     """
     API endpoint:
     1. Loads the uploaded file into a pandas DataFrame.
-    2. Passes the question + data to code_generator and code_executor.
+    2. Uses the same Gemini + agent pipeline as `core_agent.ipynb` to
+       generate and execute analysis code.
     3. Returns standardized JSON: text, table, chart
     """
     # Load DataFrame
@@ -103,145 +148,96 @@ async def analyze(
     except Exception as e:
         return JSONResponse({"text": f"Failed to read file: {e}"}, status_code=400)
 
-    generated_code = None
-
-    # -----------------------------------
-    # Step 1 — Call code_generator (if available)
-    # -----------------------------------
-
-    if generator_fn is not None:
-        try:
-            # Try multiple calling conventions
-            try:
-                generated_code = generator_fn(df=df, question=question)
-            except TypeError:
-                try:
-                    generated_code = generator_fn(question)
-                except TypeError:
-                    generated_code = generator_fn()
-        except Exception as e:
-            tb = traceback.format_exc()
-            return JSONResponse({"text": f"Error in code_generator:\n{tb}"}, status_code=500)
-
-    # -----------------------------------
-    # Step 2 — Call code_executor
-    # -----------------------------------
-
-    result = None
-
-    if executor_fn is not None:
-        attempts = [
-            {"df": df, "code": generated_code, "question": question},
-            {"df": df, "question": question},
-            {"question": question},
-            {"df": df},
-            {"code": generated_code},
-        ]
-
-        for args in attempts:
-            try:
-                clean_args = {k: v for k, v in args.items() if v is not None}
-                result = executor_fn(**clean_args)
-                break
-            except TypeError:
-                continue
-            except Exception:
-                tb = traceback.format_exc()
-                return JSONResponse({"text": f"Executor error:\n{tb}"}, status_code=500)
-
-        if result is None:
-            return JSONResponse(
-                {"text": "Executor function found but could not be called with any signature."},
-                status_code=500
-            )
-
-    else:
-        # -----------------------------------
-        # Fallback: run generated code as script
-        # -----------------------------------
-        if generated_code is None:
-            return JSONResponse(
-                {"text": "No executor or generated code available to run."},
-                status_code=500
-            )
-
-        try:
-            with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tf:
-                tf.write(generated_code)
-                script_path = tf.name
-
-            data_path = script_path + ".csv"
-            df.to_csv(data_path, index=False)
-
-            import subprocess, sys
-            proc = subprocess.run(
-                [sys.executable, script_path, data_path, question],
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-
-            stdout = proc.stdout.strip()
-            stderr = proc.stderr.strip()
-
-            import json
-            try:
-                result = json.loads(stdout)
-            except:
-                result = {"text": stdout or stderr}
-
-        except Exception:
-            tb = traceback.format_exc()
-            return JSONResponse({"text": f"Error running generated code:\n{tb}"}, status_code=500)
-
-        finally:
-            try:
-                os.remove(script_path)
-                os.remove(data_path)
-            except:
-                pass
-
-    # -----------------------------------
-    # Step 3 — Normalize result into text/table/chart
-    # -----------------------------------
-
-    out_text = None
-    out_table = None
-    out_chart = None
-
-    if isinstance(result, str):
-        out_text = result
-
-    elif isinstance(result, dict):
-        out_text = result.get("text") or result.get("summary") or ""
-
-        table = (
-            result.get("table") or
-            result.get("data") or
-            result.get("df")
+    # --------------------------------------------------
+    # 1) Initialise LLM & notebook-style agents
+    # --------------------------------------------------
+    if genai is None:
+        return JSONResponse(
+            {"text": "google-generativeai is not installed. Install `google-generativeai` and set GEMINI_API_KEY."},
+            status_code=500,
         )
-        if table is not None:
-            if hasattr(table, "to_dict"):
-                out_table = table.to_dict(orient="records")
-            elif isinstance(table, list):
-                out_table = table
 
-        chart = result.get("chart")
-        if chart is not None:
-            if hasattr(chart, "savefig"):
-                out_chart = chart_to_base64_bytes(chart)
-            elif isinstance(chart, str) and chart.startswith("data:image"):
-                out_chart = chart
+    api_key = (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GENAI_API_KEY")
+    )
+    if not api_key:
+        return JSONResponse(
+            {"text": "Missing Gemini API key. Set GEMINI_API_KEY (or GOOGLE_API_KEY) in your environment or `.emv`."},
+            status_code=500,
+        )
 
-    elif hasattr(result, "to_dict"):
-        out_table = result.to_dict(orient="records")
-        out_text = f"Returned table with {len(out_table)} rows."
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("models/gemini-2.5-flash")
+    except Exception:
+        tb = traceback.format_exc()
+        return JSONResponse({"text": f"Failed to initialise Gemini model:\n{tb}"}, status_code=500)
 
-    else:
-        out_text = str(result)
+    def llm(prompt: str) -> str:
+        resp = model.generate_content(prompt)
+        return getattr(resp, "text", "") or ""
 
+    code_gen = CodeGenerator(llm)
+    exp_agent = ExplanationAgent(llm)
+
+    # --------------------------------------------------
+    # 2) Generate Python code for this question + dataset
+    # --------------------------------------------------
+    try:
+        raw_code = code_gen.generate(question, df)
+    except Exception:
+        tb = traceback.format_exc()
+        return JSONResponse({"text": f"Error in code generation:\n{tb}"}, status_code=500)
+
+    # Basic cleanup: strip markdown fences if the model added them
+    cleaned_code = raw_code.replace("```python", "").replace("```", "")
+
+    # --------------------------------------------------
+    # 3) Execute the code with df / plotting libraries available
+    # --------------------------------------------------
+    local_env = {
+        "df": df,
+        "pd": pd,
+        "np": np,
+        "plt": plt,
+        "sns": sns,
+    }
+
+    # Ensure any previous plot file does not leak between requests
+    plot_path = "output_plot.png"
+    if os.path.exists(plot_path):
+        try:
+            os.remove(plot_path)
+        except OSError:
+            pass
+
+    try:
+        exec_output = capture_output(cleaned_code, local_env)
+    except Exception:
+        tb = traceback.format_exc()
+        return JSONResponse({"text": f"Error while executing generated code:\n{tb}"}, status_code=500)
+
+    # --------------------------------------------------
+    # 4) Summarise Python output and get natural-language explanation
+    # --------------------------------------------------
+    python_summary = (exec_output or "")[:500]
+
+    try:
+        explanation = exp_agent.explain(question, python_summary)
+    except Exception:
+        tb = traceback.format_exc()
+        return JSONResponse({"text": f"Error in explanation agent:\n{tb}"}, status_code=500)
+
+    # --------------------------------------------------
+    # 5) Build a simple result structure for the frontend
+    # --------------------------------------------------
     return {
-        "text": out_text or "",
-        "table": out_table,
-        "chart": out_chart
+        "text": explanation or exec_output or "Analysis completed.",
+        # Provide a small preview of the dataset back to the UI.
+        "table": df.head(20).to_dict(orient="records"),
+        # For now we don't try to parse or embed the plot; the Streamlit
+        # app will still display text + table, which is the critical bit.
+        "chart": None,
     }
