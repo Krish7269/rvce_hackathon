@@ -1,0 +1,21 @@
+﻿date,product,category,units_sold,unit_price,revenue,region
+03-01-2024,Energy Drink,Food & Beverage,120,2.5,300,North
+04-01-2024,Sports Shoes,Fashion,45,50,2250,South
+05-01-2024,Smart Watch,Electronics,30,120,3600,East
+07-01-2024,Energy Drink,Food & Beverage,180,2.5,450,West
+09-01-2024,Headphones,Electronics,50,80,4000,North
+11-01-2024,T-shirt,Fashion,80,15,1200,South
+12-01-2024,Energy Drink,Food & Beverage,150,2.5,375,East
+14-01-2024,Smart Watch,Electronics,25,120,3000,West
+16-01-2024,Sports Shoes,Fashion,60,50,3000,North
+18-01-2024,Energy Drink,Food & Beverage,200,2.5,500,South
+01-02-2024,T-shirt,Fashion,95,15,1425,North
+04-02-2024,Headphones,Electronics,40,80,3200,South
+06-02-2024,Smart Watch,Electronics,28,120,3360,East
+09-02-2024,Sports Shoes,Fashion,55,50,2750,West
+12-02-2024,Energy Drink,Food & Beverage,210,2.5,525,East
+15-02-2024,T-shirt,Fashion,75,15,1125,South
+18-02-2024,Energy Drink,Food & Beverage,180,2.5,450,North
+20-02-2024,Headphones,Electronics,60,80,4800,West
+22-02-2024,Sports Shoes,Fashion,65,50,3250,South
+25-02-2024,Smart Watch,Electronics,32,120,3840,North
