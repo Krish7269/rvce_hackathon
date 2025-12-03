@@ -1,5 +1,6 @@
 # Ignore environment variables
 .env
+*.env
 
 # Ignore Python cache
 __pycache__/
@@ -10,8 +11,7 @@ __pycache__/
 
 # Ignore virtual environment
 venv/
-.env/
-*.env
+env/
 
 # Ignore OS files
 .DS_Store
@@ -23,9 +23,6 @@ output_plot.png
 # Ignore reports generated automatically
 reports/*.pdf
 reports/*.txt
-# Created by venv; see https://docs.python.org/3/library/venv.html
 
+# Ignore Anaconda auto folder
 anaconda_projects/
-
-*
-
